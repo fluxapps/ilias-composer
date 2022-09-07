@@ -1,0 +1,105 @@
+version: '3.9'
+
+x-depends_on: &depends-on-ilias
+  depends_on:
+    ilias:
+      condition: service_started
+
+services:
+  nginx:
+    <<: *depends-on-ilias
+    ports:
+      - ${DOCKER_NGINX_PORTS}
+    image:  fluxms/flux-ilias-nginx:latest-ilias7.12-build02
+    restart: ${DOCKER_RESTART_POLICY}
+    volumes:
+      - type: bind
+        source: ${ILIAS_WEBDATA_DIR_SOURCE}
+        target: ${ILIAS_WEBDATA_DIR_TARGET}
+        read_only: true
+      - type: bind
+        source: ${ILIAS_CUSTOMIZING_DIR_SOURCE}
+        target: ${ILIAS_CUSTOMIZING_DIR_TARGET}
+        read_only: true
+  ilias:
+    depends_on:
+      - database
+    image: fluxms/flux-ilias-php:php7.4-ilias7.12-build${BUILD_VERSION}
+    restart: ${DOCKER_RESTART_POLICY}
+    volumes:
+      - type: bind
+        source: ${ILIAS_WEBDATA_DIR_SOURCE}
+        target: ${ILIAS_WEBDATA_DIR_TARGET}
+        read_only: false
+      - type: bind
+        source: ${ILIAS_DATA_DIR_SOURCE}
+        target: ${ILIAS_DATA_DIR_TARGET}
+        read_only: false
+      - type: bind
+        source: ${ILIAS_CUSTOMIZING_DIR_SOURCE}
+        target: ${ILIAS_CUSTOMIZING_DIR_TARGET}
+        read_only: true
+    secrets:
+      - ilias-smtp-user
+      - ilias-smtp-password
+      - ilias-cron-password
+      - ilias-root-password
+      - db-password
+    environment:
+      ILIAS_HTTP_PATH: ${ILIAS_HTTP_PATH}
+      ILIAS_CLIENT_ID: ${ILIAS_CLIENT_ID}
+  cron:
+    <<: *depends-on-ilias
+    image: fluxms/flux-ilias-cron:latest-ilias7.12-build${BUILD_VERSION}
+    restart: ${DOCKER_RESTART_POLICY}
+    volumes:
+      - type: bind
+        source: ${ILIAS_WEBDATA_DIR_SOURCE}
+        target: ${ILIAS_WEBDATA_DIR_TARGET}
+      - type: bind
+        source: ${ILIAS_DATA_DIR_SOURCE}
+        target: ${ILIAS_DATA_DIR_TARGET}
+    environment:
+      ILIAS_CLIENT_ID: ${ILIAS_CLIENT_ID}
+    secrets:
+      - ilias-cron-password
+
+
+  ilserver:
+    <<: *depends-on-ilias
+    image: fluxms/flux-ilias-ilserver:java8-ilias7.12-build${BUILD_VERSION}
+    restart: ${DOCKER_RESTART_POLICY}
+    volumes:
+      - type: bind
+        source: ${ILIAS_WEBDATA_DIR_SOURCE}
+        target: ${ILIAS_WEBDATA_DIR_TARGET}
+      - type: bind
+        source: ${ILIAS_DATA_DIR_SOURCE}
+        target: ${ILIAS_DATA_DIR_TARGET}
+      - type: bind
+        source: ${ILIAS_LUCENE_DIR_SOURCE}
+        target: ${ILIAS_LUCENE_DIR_TARGET}
+  database:
+    image: fluxms/flux-ilias-database:mariadb10.3.35-focal-build${BUILD_VERSION}
+    restart: ${DOCKER_RESTART_POLICY}
+    command: --character-set-server=utf8 --collation-server=utf8_general_ci --sql-mode="IGNORE_SPACE,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION"
+    volumes:
+      - type: bind
+        source: ${ILIAS_DATABASE_DIR_SOURCE}
+        target: ${ILIAS_DATABASE_DIR_TARGET}
+    secrets:
+      - db-password
+      - db-root-password
+secrets:
+  ilias-root-password:
+    file: "${ILIAS_STORAGE_DIR}/${COMPOSE_PROJECT_NAME}/secrets/ilias-root-password"
+  ilias-cron-password:
+    file: "${ILIAS_STORAGE_DIR}/${COMPOSE_PROJECT_NAME}/secrets/ilias-cron-password"
+  db-password:
+    file: "${ILIAS_STORAGE_DIR}/${COMPOSE_PROJECT_NAME}/secrets/db-password"
+  db-root-password:
+    file: "${ILIAS_STORAGE_DIR}/${COMPOSE_PROJECT_NAME}/secrets/db-root-password"
+  ilias-smtp-user:
+    file: "${ILIAS_STORAGE_DIR}/${COMPOSE_PROJECT_NAME}/secrets/ilias-smtp-user"
+  ilias-smtp-password:
+    file: "${ILIAS_STORAGE_DIR}/${COMPOSE_PROJECT_NAME}/secrets/ilias-smtp-password"
